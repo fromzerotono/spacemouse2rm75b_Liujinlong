@@ -111,7 +111,7 @@ class SpaceMouseReader:
     def _apply_deadzone(self, value: int) -> int:
         if abs(value) < self._deadzone:
             return 0
-        return value-self._deadzone
+        return value - self._deadzone if value > 0 else value + self._deadzone
 
     def _poll_loop(self):
         ev = SpnavEvent()
