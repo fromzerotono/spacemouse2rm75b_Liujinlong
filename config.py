@@ -5,7 +5,7 @@ import os
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # --- Robot connection ---
-ROBOT_IP = "192.168.5.105"
+ROBOT_IP = "192.168.5.182"
 ROBOT_PORT = 8080
 
 # --- Control loop ---
@@ -29,14 +29,14 @@ EMA_ALPHA = 1.0                          # exponential moving average smoothing
 # Input mapped to velocity command:
 # v_xyz = raw_axis * TRANSLATION_VEL_SCALE (m/s)
 # v_rpy = raw_axis * ROTATION_VEL_SCALE (rad/s)
-TRANSLATION_VEL_SCALE = 0.10 / 350.0     # full deflection -> 0.10 m/s
-ROTATION_VEL_SCALE = 0.50 / 350.0        # full deflection -> 0.50 rad/s
+TRANSLATION_VEL_SCALE = 0.010 / 350.0     # full deflection -> 0.10 m/s
+ROTATION_VEL_SCALE = 0.050 / 350.0        # full deflection -> 0.50 rad/s
 MAX_LINEAR_VEL = 0.10                    # m/s hard clamp
 MAX_ANGULAR_VEL = 0.50                   # rad/s hard clamp
 
 # rm_set_movev_canfd_init parameters
 MOVEV_AVOID_SINGULARITY = 1              # 0=disable, 1=enable
-MOVEV_FRAME_TYPE = 0                     # 0=work frame, 1=tool frame
+MOVEV_FRAME_TYPE = 1                     # 0=work frame, 1=tool frame
 MOVEV_DT = 0.01                          # seconds, should match loop period at 100 Hz
 MOVEV_TRAJECTORY_MODE = 0                # transparent passthrough mode
 MOVEV_RADIO = 0                          # acceleration ratio (SDK-defined semantics)

@@ -131,10 +131,11 @@ def main():
             raise RuntimeError("SDK does not expose rm_set_movev_canfd_init/rm_movev_canfd")
 
         dt = 1.0 / float(args.hz)
+        sdk_dt_ms = int(round(dt * 1000))
         init_ret = arm.arm.rm_set_movev_canfd_init(
             int(cfg.MOVEV_AVOID_SINGULARITY),
             int(cfg.MOVEV_FRAME_TYPE),
-            float(dt),
+            sdk_dt_ms,
         )
         if init_ret != 0:
             raise RuntimeError(f"rm_set_movev_canfd_init failed (ret={init_ret})")
