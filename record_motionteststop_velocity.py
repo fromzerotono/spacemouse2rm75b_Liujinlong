@@ -35,19 +35,37 @@ class ArmPoller(threading.Thread):
         self._interval = 1.0 / hz
         self._lock = threading.Lock()
         self._pose = None
+        self._vel = None
+        self._ts = None
+        self._last_pose = None
+        self._last_ts = None
         self._stop = threading.Event()
 
     def run(self):
         while not self._stop.is_set():
             ret, state = self._arm.arm.rm_get_current_arm_state()
             if ret == 0:
+                now = time.perf_counter()
+                pose = np.array(state["pose"], dtype=float)
+                vel = np.zeros(6)
+                if self._last_pose is not None and self._last_ts is not None:
+                    dt = now - self._last_ts
+                    if dt > 1e-6:
+                        vel = (pose - self._last_pose) / dt
                 with self._lock:
-                    self._pose = np.array(state["pose"], dtype=float)
+                    self._pose = pose
+                    self._vel = vel
+                    self._ts = now
+                self._last_pose = pose
+                self._last_ts = now
             time.sleep(self._interval)
 
-    def get_pose(self):
+    def get_state(self):
         with self._lock:
-            return self._pose.copy() if self._pose is not None else None
+            pose = self._pose.copy() if self._pose is not None else None
+            vel = self._vel.copy() if self._vel is not None else None
+            ts = self._ts
+            return pose, vel, ts
 
     def stop(self):
         self._stop.set()
@@ -88,6 +106,8 @@ def _save_csv(path, rows):
             "inp_mag",
             "cmd_vx", "cmd_vy", "cmd_vz",
             "cmd_wx", "cmd_wy", "cmd_wz",
+            "act_vx", "act_vy", "act_vz",
+            "act_wx", "act_wy", "act_wz",
             "tgt_x", "tgt_y", "tgt_z",
             "tgt_rx", "tgt_ry", "tgt_rz",
             "act_x", "act_y", "act_z",
@@ -197,19 +217,21 @@ def main():
             else:
                 consecutive_fails = 0
 
-            actual = poller.get_pose()
-            if actual is not None:
+            actual, actual_vel, _ = poller.get_state()
+            if actual is not None and actual_vel is not None:
                 records.append([
                     round(now, 5),
                     inp_mag,
                     *[round(v, 6) for v in vel_cmd],
+                    *[round(v, 6) for v in actual_vel],
                     *[round(v, 6) for v in target_pose],
                     *[round(v, 6) for v in actual],
                 ])
                 err_mm = np.linalg.norm(target_pose[:3] - actual[:3]) * 1000
                 speed_mm = np.linalg.norm(vel_cmd[:3]) * 1000
+                act_speed_mm = np.linalg.norm(actual_vel[:3]) * 1000
                 print(
-                    f"\r  t={now:6.2f}s  input={inp_mag:4.0f}  v={speed_mm:6.2f}mm/s  "
+                    f"\r  t={now:6.2f}s  input={inp_mag:4.0f}  v_cmd={speed_mm:6.2f}mm/s  v_act={act_speed_mm:6.2f}mm/s  "
                     f"error={err_mm:5.2f}mm  frames={len(records):5d}",
                     end="",
                     flush=True,

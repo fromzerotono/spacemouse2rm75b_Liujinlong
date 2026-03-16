@@ -28,13 +28,19 @@ def load_csv(path):
     act = np.array([[float(r["act_x"]),  float(r["act_y"]),  float(r["act_z"]),
                      float(r["act_rx"]), float(r["act_ry"]), float(r["act_rz"])] for r in rows])
 
-    has_vel = "cmd_vx" in rows[0]
-    vel = None
-    if has_vel:
-        vel = np.array([[float(r["cmd_vx"]), float(r["cmd_vy"]), float(r["cmd_vz"]),
-                         float(r["cmd_wx"]), float(r["cmd_wy"]), float(r["cmd_wz"])] for r in rows])
+    has_cmd_vel = "cmd_vx" in rows[0]
+    cmd_vel = None
+    if has_cmd_vel:
+        cmd_vel = np.array([[float(r["cmd_vx"]), float(r["cmd_vy"]), float(r["cmd_vz"]),
+                             float(r["cmd_wx"]), float(r["cmd_wy"]), float(r["cmd_wz"])] for r in rows])
 
-    return t, inp, tgt, act, vel
+    has_act_vel = "act_vx" in rows[0]
+    act_vel = None
+    if has_act_vel:
+        act_vel = np.array([[float(r["act_vx"]), float(r["act_vy"]), float(r["act_vz"]),
+                             float(r["act_wx"]), float(r["act_wy"]), float(r["act_wz"])] for r in rows])
+
+    return t, inp, tgt, act, cmd_vel, act_vel
 
 
 def main():
@@ -45,7 +51,7 @@ def main():
     args = parser.parse_args()
 
     path = args.csv_path
-    t, inp, tgt, act, vel = load_csv(path)
+    t, inp, tgt, act, cmd_vel, act_vel = load_csv(path)
 
     tgt_mm = tgt[:, :3] * 1000
     act_mm = act[:, :3] * 1000
@@ -78,21 +84,31 @@ def main():
 
     # Row 2: command velocity (if available)
     ax_v = fig.add_subplot(gs[2, :])
-    if vel is not None:
-        v_mm_s = vel[:, :3] * 1000
-        w_rad_s = vel[:, 3:]
-        ax_v.plot(t, v_mm_s[:, 0], linewidth=1, label="vx (mm/s)")
-        ax_v.plot(t, v_mm_s[:, 1], linewidth=1, label="vy (mm/s)")
-        ax_v.plot(t, v_mm_s[:, 2], linewidth=1, label="vz (mm/s)")
+    if cmd_vel is not None:
+        cmd_v_mm_s = cmd_vel[:, :3] * 1000
+        cmd_w_rad_s = cmd_vel[:, 3:]
+        ax_v.plot(t, cmd_v_mm_s[:, 0], linewidth=1.2, label="cmd vx (mm/s)")
+        ax_v.plot(t, cmd_v_mm_s[:, 1], linewidth=1.2, label="cmd vy (mm/s)")
+        ax_v.plot(t, cmd_v_mm_s[:, 2], linewidth=1.2, label="cmd vz (mm/s)")
+        if act_vel is not None:
+            act_v_mm_s = act_vel[:, :3] * 1000
+            ax_v.plot(t, act_v_mm_s[:, 0], "--", linewidth=1.0, label="act vx (mm/s)", alpha=0.8)
+            ax_v.plot(t, act_v_mm_s[:, 1], "--", linewidth=1.0, label="act vy (mm/s)", alpha=0.8)
+            ax_v.plot(t, act_v_mm_s[:, 2], "--", linewidth=1.0, label="act vz (mm/s)", alpha=0.8)
         ax_v.set_ylabel("linear vel (mm/s)")
         ax_v.set_title("Commanded velocity")
         ax_v.grid(True, alpha=0.3)
         ax_v.legend(fontsize=8, loc="upper left")
 
         ax_w = ax_v.twinx()
-        ax_w.plot(t, w_rad_s[:, 0], "--", linewidth=1, label="wx (rad/s)", alpha=0.8)
-        ax_w.plot(t, w_rad_s[:, 1], "--", linewidth=1, label="wy (rad/s)", alpha=0.8)
-        ax_w.plot(t, w_rad_s[:, 2], "--", linewidth=1, label="wz (rad/s)", alpha=0.8)
+        ax_w.plot(t, cmd_w_rad_s[:, 0], linewidth=1.2, label="cmd wx (rad/s)", alpha=0.7)
+        ax_w.plot(t, cmd_w_rad_s[:, 1], linewidth=1.2, label="cmd wy (rad/s)", alpha=0.7)
+        ax_w.plot(t, cmd_w_rad_s[:, 2], linewidth=1.2, label="cmd wz (rad/s)", alpha=0.7)
+        if act_vel is not None:
+            act_w_rad_s = act_vel[:, 3:]
+            ax_w.plot(t, act_w_rad_s[:, 0], "--", linewidth=1.0, label="act wx (rad/s)", alpha=0.6)
+            ax_w.plot(t, act_w_rad_s[:, 1], "--", linewidth=1.0, label="act wy (rad/s)", alpha=0.6)
+            ax_w.plot(t, act_w_rad_s[:, 2], "--", linewidth=1.0, label="act wz (rad/s)", alpha=0.6)
         ax_w.set_ylabel("angular vel (rad/s)")
     else:
         ax_v.text(0.01, 0.5, "No cmd_v* columns in this CSV.", transform=ax_v.transAxes,
@@ -139,10 +155,14 @@ def main():
             f"Tracking error:  mean={err_mm.mean():.2f}mm  "
             f"max={err_mm.max():.2f}mm  std={err_mm.std():.2f}mm"
         )
-    if vel is not None:
-        mean_v_mm_s = np.linalg.norm(vel[:, :3], axis=1).mean() * 1000
-        max_v_mm_s = np.linalg.norm(vel[:, :3], axis=1).max() * 1000
-        stat_text += f"\nVelocity cmd: mean={mean_v_mm_s:.2f}mm/s  max={max_v_mm_s:.2f}mm/s"
+    if cmd_vel is not None:
+        mean_cmd_v_mm_s = np.linalg.norm(cmd_vel[:, :3], axis=1).mean() * 1000
+        max_cmd_v_mm_s = np.linalg.norm(cmd_vel[:, :3], axis=1).max() * 1000
+        stat_text += f"\nVelocity cmd: mean={mean_cmd_v_mm_s:.2f}mm/s  max={max_cmd_v_mm_s:.2f}mm/s"
+    if act_vel is not None:
+        mean_act_v_mm_s = np.linalg.norm(act_vel[:, :3], axis=1).mean() * 1000
+        max_act_v_mm_s = np.linalg.norm(act_vel[:, :3], axis=1).max() * 1000
+        stat_text += f"\nVelocity act: mean={mean_act_v_mm_s:.2f}mm/s  max={max_act_v_mm_s:.2f}mm/s"
 
     ax_stat.text(0.01, 0.5, stat_text, transform=ax_stat.transAxes,
                  fontsize=10, verticalalignment="center",
