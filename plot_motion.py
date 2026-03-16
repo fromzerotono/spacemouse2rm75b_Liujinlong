@@ -1,11 +1,12 @@
 """
-Motion data visualizer: reads CSV from record_motion.py and plots target vs actual.
+Motion data visualizer: reads CSV and plots target vs actual (+ optional velocity commands).
 
 Usage:
-  python plot_motion.py [motion.csv]
+  python3 plot_motion.py motion.csv
+  python3 plot_motion.py outputs/motion_velocity.csv --no-show
 """
 
-import sys
+import argparse
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,27 +18,43 @@ def load_csv(path):
         reader = csv.DictReader(f)
         rows = list(reader)
 
-    t   = np.array([float(r["t"])       for r in rows])
+    t = np.array([float(r["t"]) for r in rows])
+    if len(t) == 0:
+        raise RuntimeError(f"No rows in CSV: {path}")
+
     inp = np.array([float(r["inp_mag"]) for r in rows])
     tgt = np.array([[float(r["tgt_x"]),  float(r["tgt_y"]),  float(r["tgt_z"]),
                      float(r["tgt_rx"]), float(r["tgt_ry"]), float(r["tgt_rz"])] for r in rows])
     act = np.array([[float(r["act_x"]),  float(r["act_y"]),  float(r["act_z"]),
                      float(r["act_rx"]), float(r["act_ry"]), float(r["act_rz"])] for r in rows])
-    return t, inp, tgt, act
+
+    has_vel = "cmd_vx" in rows[0]
+    vel = None
+    if has_vel:
+        vel = np.array([[float(r["cmd_vx"]), float(r["cmd_vy"]), float(r["cmd_vz"]),
+                         float(r["cmd_wx"]), float(r["cmd_wy"]), float(r["cmd_wz"])] for r in rows])
+
+    return t, inp, tgt, act, vel
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "motion.csv"
-    t, inp, tgt, act = load_csv(path)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("csv_path", nargs="?", default="motion.csv")
+    parser.add_argument("--out", default=None, help="Output PNG path. Default: <csv>.png")
+    parser.add_argument("--no-show", action="store_true", help="Do not call plt.show()")
+    args = parser.parse_args()
+
+    path = args.csv_path
+    t, inp, tgt, act, vel = load_csv(path)
 
     tgt_mm = tgt[:, :3] * 1000
     act_mm = act[:, :3] * 1000
     err_mm = np.linalg.norm(tgt_mm - act_mm, axis=1)
 
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(16, 13))
     fig.suptitle(f"SpaceMouse -> RM75B  Motion Recording\n{path}", fontsize=13)
 
-    gs = gridspec.GridSpec(4, 3, figure=fig, hspace=0.45, wspace=0.35)
+    gs = gridspec.GridSpec(5, 3, figure=fig, hspace=0.45, wspace=0.35)
 
     # Row 0: position X Y Z
     for i, label in enumerate(["X (mm)", "Y (mm)", "Z (mm)"]):
@@ -59,8 +76,33 @@ def main():
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-    # Row 2: tracking error + input magnitude
-    ax_err = fig.add_subplot(gs[2, :])
+    # Row 2: command velocity (if available)
+    ax_v = fig.add_subplot(gs[2, :])
+    if vel is not None:
+        v_mm_s = vel[:, :3] * 1000
+        w_rad_s = vel[:, 3:]
+        ax_v.plot(t, v_mm_s[:, 0], linewidth=1, label="vx (mm/s)")
+        ax_v.plot(t, v_mm_s[:, 1], linewidth=1, label="vy (mm/s)")
+        ax_v.plot(t, v_mm_s[:, 2], linewidth=1, label="vz (mm/s)")
+        ax_v.set_ylabel("linear vel (mm/s)")
+        ax_v.set_title("Commanded velocity")
+        ax_v.grid(True, alpha=0.3)
+        ax_v.legend(fontsize=8, loc="upper left")
+
+        ax_w = ax_v.twinx()
+        ax_w.plot(t, w_rad_s[:, 0], "--", linewidth=1, label="wx (rad/s)", alpha=0.8)
+        ax_w.plot(t, w_rad_s[:, 1], "--", linewidth=1, label="wy (rad/s)", alpha=0.8)
+        ax_w.plot(t, w_rad_s[:, 2], "--", linewidth=1, label="wz (rad/s)", alpha=0.8)
+        ax_w.set_ylabel("angular vel (rad/s)")
+    else:
+        ax_v.text(0.01, 0.5, "No cmd_v* columns in this CSV.", transform=ax_v.transAxes,
+                  verticalalignment="center")
+        ax_v.set_title("Commanded velocity")
+        ax_v.set_xlabel("time (s)")
+        ax_v.grid(True, alpha=0.3)
+
+    # Row 3: tracking error + input magnitude
+    ax_err = fig.add_subplot(gs[3, :])
     ax_err.plot(t, err_mm, color="darkorange", linewidth=1, label="position tracking error (mm)")
     ax_err.set_ylabel("error (mm)")
     ax_err.set_xlabel("time (s)")
@@ -76,8 +118,8 @@ def main():
     lines2, labels2 = ax_inp.get_legend_handles_labels()
     ax_err.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="upper left")
 
-    # Row 3: summary stats
-    ax_stat = fig.add_subplot(gs[3, :])
+    # Row 4: summary stats
+    ax_stat = fig.add_subplot(gs[4, :])
     ax_stat.axis("off")
 
     active_mask = inp > 80
@@ -97,16 +139,21 @@ def main():
             f"Tracking error:  mean={err_mm.mean():.2f}mm  "
             f"max={err_mm.max():.2f}mm  std={err_mm.std():.2f}mm"
         )
+    if vel is not None:
+        mean_v_mm_s = np.linalg.norm(vel[:, :3], axis=1).mean() * 1000
+        max_v_mm_s = np.linalg.norm(vel[:, :3], axis=1).max() * 1000
+        stat_text += f"\nVelocity cmd: mean={mean_v_mm_s:.2f}mm/s  max={max_v_mm_s:.2f}mm/s"
 
     ax_stat.text(0.01, 0.5, stat_text, transform=ax_stat.transAxes,
                  fontsize=10, verticalalignment="center",
                  family="monospace",
                  bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8))
 
-    out_png = path.replace(".csv", ".png")
+    out_png = args.out if args.out else path.replace(".csv", ".png")
     plt.savefig(out_png, dpi=150, bbox_inches="tight")
     print(f"Saved: {out_png}")
-    plt.show()
+    if not args.no_show:
+        plt.show()
 
 
 if __name__ == "__main__":

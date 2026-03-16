@@ -1,90 +1,60 @@
-# SpaceMouse Teleop for RM75-B
+# SpaceMouse + RM75B Toolkit
 
-Incremental Cartesian teleoperation of the **RealMan RM75-B** 7-DOF arm using a **3Dconnexion SpaceMouse**, with a ZhiXing 90D gripper controlled via Modbus RTU.
+SpaceMouse 控制 RealMan RM75-B 的一组脚本，包含：
+- 实时遥操作
+- 位置/速度模式运动录制
+- CSV 结果可视化出图
 
-## File Structure
+## Repo Structure
 
-```
-spacemouse_teleop/
-├── config.py               # All tunable parameters (IP, scales, axis mapping, …)
-├── spacemouse_input.py     # Non-blocking SpaceMouse reader (libspnav + ctypes)
-├── spacemouse_teleop.py    # Main control loop (50 Hz Cartesian streaming)
-├── rm75b.py                # RM75-B hardware interface (arm + gripper)
-└── libspnav.so.0.4         # libspnav shared library (bundled)
+```text
+spacemouse2rm75b/
+├── config.py
+├── rm75b.py
+├── spacemouse_input.py
+├── spacemouse_teleop.py
+├── record_motion.py
+├── record_motionteststop.py
+├── record_motionteststopfollow.py
+├── record_motionteststop_velocity.py   # 新增：速度透传录制
+├── test_latency.py
+├── plot_motion.py
+├── libspnav.so.0.4
+├── outputs/                            # 录制数据和图统一放这里
+└── README.md
 ```
 
 ## Dependencies
 
-### System
-
-- **spacenavd** — userspace SpaceMouse daemon
-
-  ```bash
-  sudo apt install spacenavd
-  sudo systemctl enable --now spacenavd
-  ```
-
-### Python
-
-- **numpy**
-- **Robotic-Arm** — RealMan official Python SDK
-
-  ```bash
-  pip install numpy Robotic-Arm
-  ```
+- `numpy`
+- `matplotlib`
+- `Robotic-Arm` (RealMan Python SDK)
+- `spacenavd` (SpaceMouse daemon)
 
 ## Quick Start
 
-1. Plug in the SpaceMouse and confirm `spacenavd` is running:
+1. 修改 `config.py` 里的机器人 IP。  
+2. 确认 `spacenavd` 正常运行。  
+3. 运行脚本。
 
-   ```bash
-   systemctl is-active spacenavd
-   ```
-
-2. Connect the robot arm over Ethernet and set the IP in `config.py`:
-
-   ```python
-   ROBOT_IP = "192.168.5.74"
-   ```
-
-3. Run:
-
-   ```bash
-   python3 spacemouse_teleop.py
-   # or override IP at runtime:
-   python3 spacemouse_teleop.py --ip 192.168.5.74 --port 8080
-   ```
-
-4. Press **Ctrl+C** to stop — the arm will slow-stop and the gripper will open.
-
-## Controls
-
-| Input | Action |
-|-------|--------|
-| Translate SpaceMouse | Move end-effector (X / Y / Z) |
-| Rotate SpaceMouse | Rotate end-effector (configurable axes) |
-| Button 0 (hold) | Close gripper |
-| Button 1 (hold) | Open gripper |
-
-## Configuration (`config.py`)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `ROBOT_IP` | `192.168.5.74` | Robot TCP/IP address |
-| `CONTROL_RATE_HZ` | `50` | Control loop frequency |
-| `DEADZONE` | `40` | SpaceMouse raw axis dead-zone |
-| `TRANSLATION_SCALE` | `0.0004/350` | Full deflection → m/cycle |
-| `ROTATION_SCALE` | `0.004/350` | Full deflection → rad/cycle |
-| `AXIS_MAP` | `[2,0,1,5,3,4]` | Remap SpaceMouse axes to robot axes |
-| `AXIS_SIGNS` | `[1,-1,1,-1,1,1]` | Flip axis directions |
-| `AXIS_ENABLE` | `[1,1,1,0,0,1]` | Enable/disable individual axes |
-| `WORKSPACE_MIN/MAX` | `±0.5 m, 0~0.7 m` | Cartesian workspace clamp |
-| `GRIPPER_MODE` | `incremental` | `binary` (one-shot) or `incremental` (hold) |
-
-## Testing SpaceMouse Input Only
+### 速度模式录制（推荐）
 
 ```bash
-python3 spacemouse_input.py
+python3 record_motionteststop_velocity.py --ip 192.168.5.105 --hz 100
 ```
 
-Prints live axis values and button events without connecting to the robot.
+默认输出：
+- CSV: `outputs/motion_velocity.csv`
+- PNG: `outputs/motion_velocity.png`（脚本结束后自动生成）
+
+### 手动绘图
+
+```bash
+python3 plot_motion.py outputs/motion_velocity.csv --no-show
+```
+
+## Notes
+
+- `record_motionteststop_velocity.py` 使用 `rm_movev_canfd`（速度透传）。
+- `plot_motion.py` 同时兼容旧 CSV 和新速度 CSV（带 `cmd_v*` 字段）。
+- 所有历史 `csv/png` 已整理进 `outputs/`。
