@@ -53,8 +53,18 @@ WORKSPACE_MAX = [0.5, 0.5, 0.7]
 # --- Gripper ---
 GRIPPER_OPEN_POS = 1000
 GRIPPER_CLOSE_POS = 0
-GRIPPER_MODE = "incremental"         # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合
+GRIPPER_MODE = "Switching"          # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合;
+# “Switching” = USB继电器模块控制继电器吸合，左键闭合，吸起芯片；右键断开，放下芯片
 GRIPPER_INCREMENT = 50               # incremental 模式下每周期变化量 (0~1000 范围)
 
 # --- Outputs ---
 OUTPUT_DIR = os.path.join(_HERE, "outputs")
+
+# --- USB relay (used when GRIPPER_MODE == "Switching") ---
+SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_BAUD_RATE = 9600
+SERIAL_TIMEOUT = 0.5
+RELAY_CHANNEL = 1
+# --- Outputs ---
+OUTPUT_DIR = os.path.join(_HERE, "outputs")
+

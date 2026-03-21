@@ -7,15 +7,22 @@ import time
 
 import numpy as np
 
-import config as cfg
+import config_switch as cfg
 from spacemouse_input import SpaceMouseReader
 from rm75b import RM75BInterface
+from class_switch import USBRelayController 
 
 
-class SpaceMouseTeleop:
+class SpaceMouseTeleop(USBRelayController):
     """Incremental Cartesian teleop: SpaceMouse -> rm_movep_canfd -> RM75B."""
 
     def __init__(self, ip: str, port: int):
+        super().__init__(
+            serial_port=cfg.SERIAL_PORT,
+            baud_rate=cfg.SERIAL_BAUD_RATE,
+            timeout=cfg.SERIAL_TIMEOUT,
+        )
+
         self.ip = ip
         self.port = port
 
@@ -26,6 +33,7 @@ class SpaceMouseTeleop:
         self._smoothed = np.zeros(6)     # EMA state
         self._consecutive_fails = 0
         self._gripper_pos = float(cfg.GRIPPER_OPEN_POS)  # 当前夹爪位置 (0~1000)
+        self._relay_ready = False
 
     # ------ setup / teardown ------
 
@@ -36,7 +44,15 @@ class SpaceMouseTeleop:
         self.mouse.start()
 
         # 2. Robot arm + gripper
-        self.arm = RM75BInterface(self.ip, self.port, enable_gripper=True)
+        self.arm = RM75BInterface(self.ip, self.port, enable_gripper=(cfg.GRIPPER_MODE != "Switching"))
+
+        if cfg.GRIPPER_MODE == "Switching":
+            try:
+                self.connect()
+                self._relay_ready = True
+            except Exception as e:
+                self._relay_ready = False
+                print(f"[WARN] Relay connect failed: {e}")
 
         # 3. Read current pose as starting point
         ret, state = self.arm.arm.rm_get_current_arm_state()
@@ -51,9 +67,15 @@ class SpaceMouseTeleop:
         if self.arm is not None:
             if slow_stop:
                 self.arm.arm.rm_set_arm_slow_stop()
-            self.arm.set_gripper_position(cfg.GRIPPER_OPEN_POS)
-            time.sleep(0.3)
+            if cfg.GRIPPER_MODE != "Switching":
+                self.arm.set_gripper_position(cfg.GRIPPER_OPEN_POS)
+                time.sleep(0.3)
             self.arm.close()
+        if cfg.GRIPPER_MODE == "Switching":
+            try:
+                self.disconnect()
+            except Exception as e:
+                print(f"[WARN] Relay disconnect failed: {e}")
         if self.mouse is not None:
             self.mouse.stop()
         print("Shutdown complete.")
@@ -102,7 +124,7 @@ class SpaceMouseTeleop:
                     self._gripper_pos = float(cfg.GRIPPER_OPEN_POS)
                     print("Gripper OPEN")
                 self.arm.set_gripper_position(self._gripper_pos)
-        else:
+        elif cfg.GRIPPER_MODE == "incremental":
             # incremental: 按住持续变化，松开停止
             self.mouse.pop_button_events()  # 消费事件队列，保持按钮状态更新
             if self.mouse.get_button(0):
@@ -113,6 +135,21 @@ class SpaceMouseTeleop:
                 self._gripper_pos = min(cfg.GRIPPER_OPEN_POS,
                                         self._gripper_pos + cfg.GRIPPER_INCREMENT)
                 self.arm.set_gripper_position(self._gripper_pos)
+        elif cfg.GRIPPER_MODE == "Switching":
+            # if not self._relay_ready:
+            #     return
+            for bnum, pressed in self.mouse.pop_button_events():
+                if not pressed:
+                    continue
+                try:
+                    if bnum == 0:
+                        self.open_relay(cfg.RELAY_CHANNEL)
+                        print("Relay CLOSE (magnet on)")
+                    elif bnum == 1:
+                        self.close_relay(cfg.RELAY_CHANNEL)
+                        print("Relay OPEN (magnet off)")
+                except Exception as e:
+                    print(f"[WARN] Relay command failed: {e}")
 
     # ------ main loop ------
 
@@ -137,7 +174,7 @@ class SpaceMouseTeleop:
             self._clamp_workspace()
 
             # 5. Send to robot
-            ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=True)
+            ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=False)
             if ret != 0:
                 self._consecutive_fails += 1
                 if self._consecutive_fails >= 10:

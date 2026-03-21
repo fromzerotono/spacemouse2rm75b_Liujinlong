@@ -204,7 +204,7 @@ def main():
 
             ret = arm.arm.rm_movev_canfd(
                 vel_cmd.tolist(),
-                False,
+                True,  # follow
                 int(cfg.MOVEV_TRAJECTORY_MODE),
                 int(cfg.MOVEV_RADIO),
             )
