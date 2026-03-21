@@ -114,15 +114,15 @@ def main():
         raw = mouse.get_axes()
         inp_mag = max(abs(v) for v in raw)
 
-        if inp_mag < cfg.DEADZONE:
-            arm.arm.rm_set_arm_stop()
-            print(f"\r  t={now:6.2f}s  input={inp_mag:4.0f}  [STOPPED - no input]          ",
-                  end="", flush=True)
-            elapsed = time.monotonic() - t0
-            sleep_t = dt - elapsed
-            if sleep_t > 0:
-                time.sleep(sleep_t)
-            continue
+        # if inp_mag < cfg.DEADZONE:
+        #     arm.arm.rm_set_arm_stop()
+        #     print(f"\r  t={now:6.2f}s  input={inp_mag:4.0f}  [STOPPED - no input]          ",
+        #           end="", flush=True)
+        #     elapsed = time.monotonic() - t0
+        #     sleep_t = dt - elapsed
+        #     if sleep_t > 0:
+        #         time.sleep(sleep_t)
+        #     continue
 
         mapped = np.array([raw[cfg.AXIS_MAP[i]] * cfg.AXIS_SIGNS[i] for i in range(6)], dtype=float)
         smoothed = cfg.EMA_ALPHA * mapped + (1.0 - cfg.EMA_ALPHA) * smoothed
