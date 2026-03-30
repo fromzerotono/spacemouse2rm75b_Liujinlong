@@ -9,7 +9,7 @@ ROBOT_IP = "192.168.1.18"
 ROBOT_PORT = 8080
 
 # --- Control loop ---
-CONTROL_RATE_HZ = 50
+CONTROL_RATE_HZ = 100
 ARM_STATE_POLL_HZ = 200
 
 # --- libspnav ---
@@ -41,6 +41,18 @@ MOVEV_DT = 0.01                          # seconds, should match loop period at 
 MOVEV_TRAJECTORY_MODE = 2                # transparent passthrough mode
 MOVEV_RADIO = 50                          # acceleration ratio (SDK-defined semantics)
 
+# --- Force-position streaming (rm_force_position_move_pose) ---
+# Signature:
+# rm_force_position_move_pose(pose, sensor, mode, dir, force, follow)
+FORCE_TASK_SENSOR = 1                    # sensor index (SDK-defined)
+FORCE_TASK_MODE = 1                      # force-position mode (官网示例: 六维力沿工具坐标系指定方向)
+FORCE_TASK_DIR = 2                       # 0~5 -> Fx,Fy,Fz,Mx,My,Mz
+FORCE_TARGET = 1.0                       # target force / torque on FORCE_TASK_DIR axis
+FORCE_THRESHOLD = 0.1                    # acceptable error band around FORCE_TARGET
+FORCE_TASK_FOLLOW = True                 # follow mode for transparent streaming
+FORCE_DEBUG_PRINT_EVERY = 1              # print interval in control cycles
+MAX_CONSECUTIVE_FORCE_CMD_FAILS = 2     # emergency stop threshold
+
 # --- Axis mapping: SpaceMouse -> robot [x, y, z, rx, ry, rz] ---
 AXIS_SIGNS = [1, -1, 1, -1, 1, 1]       # flip signs to match intuitive directions
 AXIS_MAP = [2, 0, 1, 5, 3, 4]           # reorder axes if needed
@@ -53,8 +65,17 @@ WORKSPACE_MAX = [0.5, 0.5, 0.7]
 # --- Gripper ---
 GRIPPER_OPEN_POS = 1000
 GRIPPER_CLOSE_POS = 0
-GRIPPER_MODE = "incremental"         # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合
+GRIPPER_MODE = "Switching"          # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合;
+# “Switching” = USB继电器模块控制继电器吸合，左键闭合，吸起芯片；右键断开，放下芯片
 GRIPPER_INCREMENT = 50               # incremental 模式下每周期变化量 (0~1000 范围)
 
 # --- Outputs ---
 OUTPUT_DIR = os.path.join(_HERE, "outputs")
+
+# --- USB relay (used when GRIPPER_MODE == "Switching") ---
+SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_BAUD_RATE = 9600
+SERIAL_TIMEOUT = 0.5
+RELAY_CHANNEL = 1
+
+

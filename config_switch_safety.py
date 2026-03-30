@@ -9,7 +9,7 @@ ROBOT_IP = "192.168.1.18"
 ROBOT_PORT = 8080
 
 # --- Control loop ---
-CONTROL_RATE_HZ = 50
+CONTROL_RATE_HZ = 100
 ARM_STATE_POLL_HZ = 200
 
 # --- libspnav ---
@@ -41,6 +41,16 @@ MOVEV_DT = 0.01                          # seconds, should match loop period at 
 MOVEV_TRAJECTORY_MODE = 2                # transparent passthrough mode
 MOVEV_RADIO = 50                          # acceleration ratio (SDK-defined semantics)
 
+# --- Force-position streaming (rm_force_position_move_pose) ---
+# Signature:
+
+# --- Directional Z-force limit (allow Z up, block Z down when triggered) ---
+# 这里单纯是数值，方向在主程序里面加了负号
+FORCE_Z_LIMIT_ENABLE = True             # True: enable directional Fz protection
+FORCE_Z_LIMIT_DIRECTION = 1             # +1: trigger when Fz > threshold, -1: trigger when Fz < -threshold
+FORCE_Z_LIMIT_TRIGGER_N = 1.5           # lock threshold (N), enters "Z down blocked" state 锁定阈值
+FORCE_Z_LIMIT_RELEASE_N = 0.8           # unlock threshold (N), should be lower than trigger for hysteresis 放松的阈值
+
 # --- Axis mapping: SpaceMouse -> robot [x, y, z, rx, ry, rz] ---
 AXIS_SIGNS = [1, -1, 1, -1, 1, 1]       # flip signs to match intuitive directions
 AXIS_MAP = [2, 0, 1, 5, 3, 4]           # reorder axes if needed
@@ -53,8 +63,17 @@ WORKSPACE_MAX = [0.5, 0.5, 0.7]
 # --- Gripper ---
 GRIPPER_OPEN_POS = 1000
 GRIPPER_CLOSE_POS = 0
-GRIPPER_MODE = "incremental"         # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合
+GRIPPER_MODE = "Switching"          # "binary" = 按一下全开/全闭; "incremental" = 按住持续开合;
+# “Switching” = USB继电器模块控制继电器吸合，左键闭合，吸起芯片；右键断开，放下芯片
 GRIPPER_INCREMENT = 50               # incremental 模式下每周期变化量 (0~1000 范围)
 
 # --- Outputs ---
 OUTPUT_DIR = os.path.join(_HERE, "outputs")
+
+# --- USB relay (used when GRIPPER_MODE == "Switching") ---
+SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_BAUD_RATE = 9600
+SERIAL_TIMEOUT = 0.5
+RELAY_CHANNEL = 1
+
+

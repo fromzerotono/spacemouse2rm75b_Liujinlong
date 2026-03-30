@@ -73,7 +73,7 @@ def main():
     target_pose = np.array(state["pose"], dtype=float)
     print(f"Start pose: {np.round(target_pose, 4).tolist()}")
 
-    poller = ArmPoller(arm, hz=200)
+    poller = ArmPoller(arm, hz=100)
     poller.start()
     time.sleep(0.2)
 

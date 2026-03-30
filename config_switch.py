@@ -5,11 +5,19 @@ import os
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # --- Robot connection ---
+<<<<<<< HEAD
 ROBOT_IP = "192.168.5.18"
 ROBOT_PORT = 8080
 
 # --- Control loop ---
 CONTROL_RATE_HZ = 50
+=======
+ROBOT_IP = "192.168.1.18"
+ROBOT_PORT = 8080
+
+# --- Control loop ---
+CONTROL_RATE_HZ = 100
+>>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
 ARM_STATE_POLL_HZ = 200
 
 # --- libspnav ---
@@ -17,7 +25,11 @@ LIBSPNAV_PATH = os.path.join(_HERE, "libspnav.so.0.4")
 
 # --- SpaceMouse input processing ---
 DEADZONE = 40                            # raw axis dead-zone (full range ~+-350)
+<<<<<<< HEAD
 TRANSLATION_SCALE = 0.0004 / 350.0       # full deflection -> 0.0004 m/cycle (0.02 m/s @ 50Hz)
+=======
+TRANSLATION_SCALE = 0.0002 / 350.0       # full deflection -> 0.0004 m/cycle (0.02 m/s @ 50Hz)
+>>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
 ROTATION_SCALE = 0.002 / 350.0           # full deflection -> 0.005 rad/cycle (0.25 rad/s @ 50Hz)
 
 MAX_TRANSLATION_PER_CYCLE = 0.001        # m, hard clamp per cycle

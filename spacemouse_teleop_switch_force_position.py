@@ -1,4 +1,4 @@
-"""SpaceMouse teleoperation for RM75B — incremental Cartesian control via rm_movep_canfd."""
+"""SpaceMouse teleoperation for RM75B via rm_force_position_move_pose."""
 
 import sys
 import argparse
@@ -7,14 +7,14 @@ import time
 
 import numpy as np
 
-import config_switch as cfg
+import config_switch_force_position as cfg
 from spacemouse_input import SpaceMouseReader
 from rm75b import RM75BInterface
 from class_switch import USBRelayController 
 
 
 class SpaceMouseTeleop(USBRelayController):
-    """Incremental Cartesian teleop: SpaceMouse -> rm_movep_canfd -> RM75B."""
+    """Incremental Cartesian teleop: SpaceMouse -> rm_force_position_move_pose."""
 
     def __init__(self, ip: str, port: int):
         super().__init__(
@@ -34,6 +34,8 @@ class SpaceMouseTeleop(USBRelayController):
         self._consecutive_fails = 0
         self._gripper_pos = float(cfg.GRIPPER_OPEN_POS)  # 当前夹爪位置 (0~1000)
         self._relay_ready = False
+        self._loop_idx = 0
+        self._force_payload_warned = False
 
     # ------ setup / teardown ------
 
@@ -45,6 +47,9 @@ class SpaceMouseTeleop(USBRelayController):
 
         # 2. Robot arm + gripper
         self.arm = RM75BInterface(self.ip, self.port, enable_gripper=(cfg.GRIPPER_MODE != "Switching"))
+        self.arm.arm.rm_start_force_position_move()
+        if not hasattr(self.arm.arm, "rm_force_position_move_pose"):
+            raise RuntimeError("SDK missing rm_force_position_move_pose, please upgrade robot SDK.")
 
         if cfg.GRIPPER_MODE == "Switching":
             try:
@@ -65,6 +70,10 @@ class SpaceMouseTeleop(USBRelayController):
     def teardown(self, slow_stop: bool = True):
         """Clean shutdown: stop arm, open gripper, disconnect."""
         if self.arm is not None:
+            try:
+                self.arm.arm.rm_stop_force_position_move()
+            except Exception:
+                pass
             if slow_stop:
                 self.arm.arm.rm_set_arm_slow_stop()
             if cfg.GRIPPER_MODE != "Switching":
@@ -83,11 +92,7 @@ class SpaceMouseTeleop(USBRelayController):
     # ------ control helpers ------
 
     def _compute_delta(self, raw_axes):
-<<<<<<< HEAD
-        """Apply axis mapping, sign flip, EMA smoothing, scaling, and clamping."""
-=======
         """Apply axis mapping, sign flip, EMA smcoothing, scaling, and clamping."""
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
         mapped = np.array([raw_axes[cfg.AXIS_MAP[i]] * cfg.AXIS_SIGNS[i] for i in range(6)],
                           dtype=float)
 
@@ -155,51 +160,149 @@ class SpaceMouseTeleop(USBRelayController):
                 except Exception as e:
                     print(f"[WARN] Relay command failed: {e}")
 
+    def _read_force_wrench(self):
+        """Read and return [Fx, Fy, Fz, Mx, My, Mz]. Returns None on failure."""
+        try:
+            result = self.arm.arm.rm_get_force_data()
+        except Exception as e:
+            print(f"[WARN] rm_get_force_data failed: {e}")
+            return None
+
+        ret = 0
+        payload = result
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], (int, np.integer)):
+            ret, payload = result
+        if ret != 0:
+            print(f"[WARN] rm_get_force_data returned {ret}")
+            return None
+
+        if isinstance(payload, dict):
+            if all(k in payload for k in ("Fx", "Fy", "Fz", "Mx", "My", "Mz")):
+                return np.array([
+                    payload["Fx"], payload["Fy"], payload["Fz"],
+                    payload["Mx"], payload["My"], payload["Mz"],
+                ], dtype=float)
+
+            # RM SDK (v1.1.4+) returns rm_force_data_t as dict with these keys.
+            for key in ("zero_force_data", "work_zero_force_data", "tool_zero_force_data", "force_data", "force", "data"):
+                if key in payload and payload[key] is not None:
+                    payload = payload[key]
+                    break
+            else:
+                if not self._force_payload_warned:
+                    self._force_payload_warned = True
+                    print(f"[WARN] Unknown force payload keys: {list(payload.keys())}")
+                payload = None
+        if payload is None:
+            return None
+
+        try:
+            force6 = np.array(payload[:6], dtype=float)
+            if force6.shape[0] < 6:
+                print(f"[WARN] Invalid force payload length: {force6.shape[0]}")
+                return None
+        except Exception as e:
+            print(f"[WARN] Force payload parse failed: {e}")
+            return None
+
+        return force6
+
     # ------ main loop ------
 
     def run(self):
-        """50 Hz control loop."""
+        """Force-position streaming loop."""
         dt = 1.0 / cfg.CONTROL_RATE_HZ
-        print(f"Running at {cfg.CONTROL_RATE_HZ} Hz.  Ctrl+C to stop.\n")
+        axis_names = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"]
+        dir_idx = int(cfg.FORCE_TASK_DIR)
+        if not (0 <= dir_idx < 6):
+            raise ValueError(f"Invalid FORCE_TASK_DIR={dir_idx}, expected 0~5")
+
+        print(
+            f"Running at {cfg.CONTROL_RATE_HZ} Hz with rm_force_position_move_pose.\n"
+            f"force axis={axis_names[dir_idx]}, target={cfg.FORCE_TARGET:.3f}, "
+            f"threshold=+/-{cfg.FORCE_THRESHOLD:.3f}, follow={bool(cfg.FORCE_TASK_FOLLOW)}\n"
+            "Ctrl+C to stop.\n"
+        )
 
         while True:
             t0 = time.monotonic()
+            self._loop_idx += 1
 
             # 1. Read SpaceMouse
             raw = self.mouse.get_axes()
 
+
             # 2. Compute incremental delta
             delta = self._compute_delta(raw)
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
             # 3. Accumulate target pose
             self.target_pose += delta
-
+            print("1",self.target_pose)
             # 4. Workspace clamp
             self._clamp_workspace()
 
-            # 5. Send to robot
-<<<<<<< HEAD
-            ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=False)
-=======
-            ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=True)
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
+            # 5. Send force-position command to robot
+            pose_cmd = self.target_pose.tolist()
+            ret = self.arm.arm.rm_force_position_move_pose(
+                pose_cmd,
+                int(cfg.FORCE_TASK_SENSOR),
+                int(cfg.FORCE_TASK_MODE),
+                dir_idx,
+                float(cfg.FORCE_TARGET),
+                bool(cfg.FORCE_TASK_FOLLOW),
+            )
             if ret != 0:
                 self._consecutive_fails += 1
-                if self._consecutive_fails >= 10:
-                    print(f"[ERROR] {self._consecutive_fails} consecutive movep failures — emergency stop!")
+                if self._consecutive_fails >= int(cfg.MAX_CONSECUTIVE_FORCE_CMD_FAILS):
+                    print(
+                        f"[ERROR] {self._consecutive_fails} consecutive "
+                        "rm_force_position_move_pose failures — emergency stop!"
+                    )
                     self.arm.arm.rm_set_arm_stop()
                     break
             else:
                 self._consecutive_fails = 0
 
-            # 6. Gripper buttons
+            # 6. Read force feedback + real-time debug info
+            force6 = self._read_force_wrench()
+            measured = None
+            reached = "N/A"
+            if force6 is not None:
+                measured = float(force6[dir_idx])
+                reached = "Y" if abs(measured - float(cfg.FORCE_TARGET)) <= float(cfg.FORCE_THRESHOLD) else "N"
+
+            should_print = (
+                self._loop_idx % int(cfg.FORCE_DEBUG_PRINT_EVERY) == 0
+                or ret != 0
+            )
+            if should_print:
+                if measured is None:
+                    print(
+                        "[FORCE] "
+                        f"ret={ret} fails={self._consecutive_fails} "
+                        f"axis={axis_names[dir_idx]} target={float(cfg.FORCE_TARGET):+7.3f} "
+                        "measured=N/A reached=N/A "
+                        f"pose=[{pose_cmd[0]:+6.3f}, {pose_cmd[1]:+6.3f}, {pose_cmd[2]:+6.3f}, "
+                        f"{pose_cmd[3]:+6.3f}, {pose_cmd[4]:+6.3f}, {pose_cmd[5]:+6.3f}]",
+                        end="\r",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        "[FORCE] "
+                        f"ret={ret} fails={self._consecutive_fails} "
+                        f"axis={axis_names[dir_idx]} target={float(cfg.FORCE_TARGET):+7.3f} "
+                        f"measured={measured:+7.3f} th={float(cfg.FORCE_THRESHOLD):.3f} reached={reached} "
+                        f"pose=[{pose_cmd[0]:+6.3f}, {pose_cmd[1]:+6.3f}, {pose_cmd[2]:+6.3f}, "
+                        f"{pose_cmd[3]:+6.3f}, {pose_cmd[4]:+6.3f}, {pose_cmd[5]:+6.3f}]",
+                        end="\r",
+                        flush=True,
+                    )
+
+            # 7. Gripper buttons
             self._handle_buttons()
 
-            # 7. Timing
+            # 8. Timing
             elapsed = time.monotonic() - t0
             sleep_time = dt - elapsed
             if sleep_time > 0:
