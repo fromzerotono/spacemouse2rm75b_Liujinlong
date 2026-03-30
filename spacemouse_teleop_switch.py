@@ -83,11 +83,7 @@ class SpaceMouseTeleop(USBRelayController):
     # ------ control helpers ------
 
     def _compute_delta(self, raw_axes):
-<<<<<<< HEAD
-        """Apply axis mapping, sign flip, EMA smoothing, scaling, and clamping."""
-=======
         """Apply axis mapping, sign flip, EMA smcoothing, scaling, and clamping."""
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
         mapped = np.array([raw_axes[cfg.AXIS_MAP[i]] * cfg.AXIS_SIGNS[i] for i in range(6)],
                           dtype=float)
 
@@ -170,11 +166,7 @@ class SpaceMouseTeleop(USBRelayController):
 
             # 2. Compute incremental delta
             delta = self._compute_delta(raw)
-<<<<<<< HEAD
-
-=======
             
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
             # 3. Accumulate target pose
             self.target_pose += delta
 
@@ -182,11 +174,7 @@ class SpaceMouseTeleop(USBRelayController):
             self._clamp_workspace()
 
             # 5. Send to robot
-<<<<<<< HEAD
-            ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=False)
-=======
             ret = self.arm.arm.rm_movep_canfd(self.target_pose.tolist(), follow=True)
->>>>>>> 723f6d2 (feat:增加了电磁阀和力约束)
             if ret != 0:
                 self._consecutive_fails += 1
                 if self._consecutive_fails >= 10:
